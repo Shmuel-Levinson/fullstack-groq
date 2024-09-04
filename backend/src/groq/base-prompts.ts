@@ -11,14 +11,14 @@ export function generateTaskAgentPrompt(taskAgentPrompt: string, testCases: []):
 
 export function generateTestAgentPrompt(taskAgentPrompt: string): string {
     return `
-    You are a test case generator version ${Math.floor(1000*Math.random())}
-Generate 1 test case for a Task AI whose prompt was: 
+    You are a test case generator. 
+Generate a test case for a Task AI whose prompt was: 
 
-"${taskAgentPrompt}". 
+${taskAgentPrompt} 
 
-Return a JSON with a single field that contains test cases case. Don't include an expected output.
+Return a JSON with a single field that contains a test case. Don't include an expected output.
 Use this exact json format: 
-{"testCases": ["this is test case 1"]}
+{"test_case": "this is the test case"}
 Don't add anything else to your response besides the JSON.
     `
 }

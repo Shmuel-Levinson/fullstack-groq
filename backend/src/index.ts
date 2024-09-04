@@ -4,7 +4,8 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import bodyParser from 'body-parser';
 import {
-    generateConversationWithRepeatedUserPrompt,
+    generateConversationWithPredefinedUserResponses,
+    generateConversationWithRepeatedUserPrompt, generateTestCases, generateUserMessage,
     getGroqResponse,
     getGroqResponseWithMessages
 } from "./groq/groq-api";
@@ -76,6 +77,22 @@ app.post('/repeatedConversation', async (req, res) => {
     })
     res.send(ret)
     console.log(ret);
+})
+
+app.post('/generateConversation', async (req, res) => {
+    const body = req.body;
+    const {initialMessages, userResponses} = body;
+    const conversation = await generateConversationWithPredefinedUserResponses({initialMessages, userResponses});
+    res.send(conversation.filter(m => m.role === 'assistant').map(m => m.content));
+    console.log(conversation);
+})
+
+app.post('/generateTestCases', async (req, res) => {
+    const body = req.body;
+    const {taskAgentDefinitionPrompt, numTestCases} = body;
+    const testCases = await generateTestCases(taskAgentDefinitionPrompt, numTestCases)
+    res.send(testCases);
+    console.log(testCases);
 })
 
 const port = process.env.PORT || 3000;
