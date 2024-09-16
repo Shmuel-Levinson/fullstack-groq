@@ -1,4 +1,5 @@
 import {Groq} from 'groq-sdk';
+import GroqClient from 'groq-sdk'
 import dotenv from 'dotenv'
 import {log} from "console";
 import {generateTestAgentPrompt} from "./base-prompts";
@@ -6,6 +7,7 @@ import {generateTestAgentPrompt} from "./base-prompts";
 
 dotenv.config();
 const groq = new Groq({apiKey: process.env.GROQ_API_KEY});
+// const groq = new GroqClient(process.env.GROQ_API_KEY, {rejectUnauthorized: false})
 export type ChatMessage = { role: "assistant" | "system" | "user"; content: string };
 
 export async function getGroqResponse(prompt: string) {
@@ -108,6 +110,6 @@ export async function  generateTestCases(taskAgentDefinitionPrompt: string, numT
     for (let i = 0; i < numTestCases-1; i++) {
         userResponses.push("generate one more please")
     }
-    const conversation = await generateConversationWithPredefinedUserResponses({initialMessages, userResponses});
-    return (conversation.filter(m => m.role === 'assistant').map(m => JSON.parse(m.content).test_case));
+    const testCasesConversation = await generateConversationWithPredefinedUserResponses({initialMessages, userResponses});
+    return (testCasesConversation.filter(m => m.role === 'assistant').map(m => (m.content)));
 }

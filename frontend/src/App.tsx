@@ -1,35 +1,53 @@
 import './App.css'
 import axios from 'axios'
 import {useState} from "react";
+import {ExampleTaskAgentDefinitionPrompts} from "./example-prompts.ts";
+const emptyTestingResults = {input:"",output:"",evaluation:""}
+
+function EvalTriplet({input, output, evaluation}: { input: string, output: string, evaluation: string }) {
+    return <div style={{display: "flex", flexDirection: "row", gap: "10px"}}>
+        <TitledTextArea title={"Test Case"} value={input}/>
+        <TitledTextArea title={"Agent output"} value={output}/>
+        <TitledTextArea title={"Assessment"} value={evaluation}/>
+    </div>;
+}
 
 function App() {
-    const [prompt, setPrompt] = useState(`You are a tool that receives a text and returns a list of the people mentioned in the text. your response should only be a list without any additional text. You should return a JSON in this exact format: {output:output-text}. Do not add any text to your response besides the JSON.`)
-    const [apiResponse, setApiResponse] = useState<{testCases?:string,taskAgentOutput?:string,assessment?:string}>({})
+    const [taskAgentDefinitionPrompt, setTaskAgentDefinitionPrompt] = useState(ExampleTaskAgentDefinitionPrompts.detailsExtractor)
+    const [testingResults, setTestingResults] = useState<{input:string,output:string,evaluation:string}[]>([emptyTestingResults])
     return (
         <>
             <div style={{
-                display: "flex",
+                // display: "flex",
                 gap: 10,
                 width: "100%",
-                border: "1px solid black",
+                // border: "1px solid black",
                 alignItems: "center",
                 justifyContent: "center"
             }}>
                 <TitledTextArea title={"Your Agent Definition Prompt"}
-                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)}
-                                value={prompt}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTaskAgentDefinitionPrompt(e.target.value)}
+                                value={taskAgentDefinitionPrompt}
+
                 />
-                <button onClick={testPrompt}> {"Test it!"} </button>
-                <TitledTextArea title={"Test Cases"} value={apiResponse?.testCases}/>
-                <TitledTextArea title={"Agent output"} value={apiResponse?.taskAgentOutput}/>
-                <TitledTextArea title={"Assessment"} value={apiResponse?.assessment}/>
+                <button onClick={testAndEvaluate}> {"Test it!"} </button>
+                <div style={{display:"flex",flexDirection:"column", gap:30}}>{testingResults.map((testingResult, i) => {
+                    return <EvalTriplet key={`eval_triplet_${i}`} input={testingResult.input}
+                                        output={testingResult.output}
+                                        evaluation={testingResult.evaluation}/>
+                })}</div>
             </div>
+
         </>
     )
 
-    async function testPrompt() {
-        const res = await axios.post("http://localhost:5000/prompt", {prompt: prompt, history: []})
-        setApiResponse(res.data)
+    async function testAndEvaluate() {
+        setTestingResults([emptyTestingResults])
+        const res = await axios.post("http://localhost:5000/testAndEvaluate", {
+            taskAgentDefinitionPrompt: taskAgentDefinitionPrompt,
+            numTestCases: 3
+        })
+        setTestingResults(res.data)
         console.log(res.data)
 
     }
@@ -40,7 +58,7 @@ function App() {
 //     console.log(res.data)
 // }
 
-function TitledTextArea({title, value, onChange}: { title?: string, value?: string,onChange?: Function }) {
+function TitledTextArea({title, value, onChange, rows = 15}: { title?: string, value?: string,onChange?: Function, rows?: number }) {
     return (<div style={{border: "1px solid green"}}>
         <div>{title}</div>
         <textarea
@@ -51,7 +69,7 @@ function TitledTextArea({title, value, onChange}: { title?: string, value?: stri
                 }
                 console.log(value)
             }}
-            style={{resize: "none"}} rows={30}/>
+            style={{resize: "none", width:"100%"}} rows={rows} cols={50}/>
     </div>)
 }
 

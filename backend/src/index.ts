@@ -4,13 +4,19 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import bodyParser from 'body-parser';
 import {
+    generateAssistantMessage,
     generateConversationWithPredefinedUserResponses,
     generateConversationWithRepeatedUserPrompt, generateTestCases, generateUserMessage,
     getGroqResponse,
     getGroqResponseWithMessages
 } from "./groq/groq-api";
 import {log} from "console";
-import {generateTaskAgentPrompt, generateTestAgentPrompt, generateValidationAgentPrompt} from "./groq/base-prompts";
+import {
+    generateTaskAgentPrompt,
+    generateTestAgentPrompt,
+    generateValidationAgentDefinitionPrompt,
+    generateValidationAgentPrompt
+} from "./groq/base-prompts";
 import cors from 'cors';
 
 dotenv.config();
@@ -87,12 +93,49 @@ app.post('/generateConversation', async (req, res) => {
     console.log(conversation);
 })
 
-app.post('/generateTestCases', async (req, res) => {
+async function generateTaskAgentOutputs(taskAgentDefinitionPrompt:string, testCases: string[]) {
+    const conv = await generateConversationWithPredefinedUserResponses({
+        initialMessages: [
+            generateUserMessage(taskAgentDefinitionPrompt + "\nYou will receive your inputs now."),
+            generateUserMessage(testCases.length > 0 ? testCases[0] : "")
+        ], userResponses: testCases.slice(1)
+    })
+    const taskAgentOutputs: string[] = conv.filter(m => m.role === 'assistant').map(m => m.content)
+    return taskAgentOutputs;
+}
+
+async function generateEvaluationAgentOutputs(taskAgentDefinitionPrompt:string, evaluationPairs: string[]) {
+    const conv = await generateConversationWithPredefinedUserResponses({
+        initialMessages: [
+            generateUserMessage(generateValidationAgentDefinitionPrompt(taskAgentDefinitionPrompt) + "\nYou will receive your inputs now."),
+            generateUserMessage(evaluationPairs.length > 0 ? evaluationPairs[0] : "")
+        ], userResponses: evaluationPairs.slice(1)
+    })
+    const evaluationAgentOutputs: string[] = conv.filter(m => m.role === 'assistant').map(m => m.content)
+    return evaluationAgentOutputs;
+}
+
+app.post('/testAndEvaluate', async (req, res) => {
     const body = req.body;
     const {taskAgentDefinitionPrompt, numTestCases} = body;
-    const testCases = await generateTestCases(taskAgentDefinitionPrompt, numTestCases)
-    res.send(testCases);
-    console.log(testCases);
+    const testCases:string[] = await generateTestCases(taskAgentDefinitionPrompt, numTestCases)
+    const taskAgentOutputs = await generateTaskAgentOutputs(taskAgentDefinitionPrompt, testCases);
+    const evaluationObjects = []
+    for(let i = 0; i <testCases.length; i++){
+        evaluationObjects.push({
+            input: testCases[i],
+            output: taskAgentOutputs[i],
+            evaluation:""
+        })
+    }
+    const evaluationAgentOutputs = await generateEvaluationAgentOutputs(taskAgentDefinitionPrompt, evaluationObjects.map(obj=>{
+        return `Input: ${obj.input} \n\n Output: ${obj.output}`
+    }))
+    evaluationObjects.forEach((o,i)=>{
+        o.evaluation = evaluationAgentOutputs[i]
+    })
+    res.send(evaluationObjects);
+    console.log(evaluationObjects);
 })
 
 const port = process.env.PORT || 3000;
