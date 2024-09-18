@@ -2,19 +2,42 @@ import './App.css'
 import axios from 'axios'
 import {useState} from "react";
 import {ExampleTaskAgentDefinitionPrompts} from "./example-prompts.ts";
-const emptyTestingResults = {input:"",output:"",evaluation:""}
 
-function EvalTriplet({input, output, evaluation}: { input: string, output: string, evaluation: string }) {
-    return <div style={{display: "flex", flexDirection: "row", gap: "10px"}}>
-        <TitledTextArea title={"Test Case"} value={input}/>
-        <TitledTextArea title={"Agent output"} value={output}/>
-        <TitledTextArea title={"Assessment"} value={evaluation}/>
+const emptyTestingResults = {input: "", output: "", evaluation: {}}
+
+interface IEvaluation {
+    accuracy?: number
+    clarity?: number
+    completeness?: number
+    explanation?: string
+    overall_score?: number;
+    relevance?: number;
+}
+
+interface TestingResult {
+    input: string;
+    output: string;
+    evaluation: IEvaluation
+}
+
+function EvalTriplet({input, output, evaluation}: { input: string, output: string, evaluation: IEvaluation }) {
+    return <div style={{display: "flex", flexDirection: "row", gap: "10px", justifyContent: "space-evenly"}}>
+        <div style={{flex: 1}}><TitledTextArea title={"Test Case"} value={input}/></div>
+        <div style={{flex: 1}}>
+            <div style={{fontWeight: "bold"}}>Output</div>
+            <div title={"Agent output"}>{output}</div>
+        </div>
+        <div style={{flex: 1}}>
+
+            <div style={{fontWeight: "bold"}}>Evaluation</div>
+            <div title={"Assessment"}>{evaluation.explanation}</div>
+        </div>
     </div>;
 }
 
 function App() {
     const [taskAgentDefinitionPrompt, setTaskAgentDefinitionPrompt] = useState(ExampleTaskAgentDefinitionPrompts.detailsExtractor)
-    const [testingResults, setTestingResults] = useState<{input:string,output:string,evaluation:string}[]>([emptyTestingResults])
+    const [testingResults, setTestingResults] = useState<TestingResult[]>([emptyTestingResults])
     return (
         <>
             <div style={{
@@ -30,8 +53,16 @@ function App() {
                                 value={taskAgentDefinitionPrompt}
 
                 />
-                <button onClick={testAndEvaluate}> {"Test it!"} </button>
-                <div style={{display:"flex",flexDirection:"column", gap:30}}>{testingResults.map((testingResult, i) => {
+                <button onClick={() => testAndEvaluate({
+                    taskAgentDefinitionPrompt: taskAgentDefinitionPrompt,
+                    // testCases: ["Moon is big. John is fat", "Mark will meet marry at 2pm"],
+                    numTestCases: 1
+                })}> {"Test it!"} </button>
+                <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 30
+                }}>{testingResults.map((testingResult, i) => {
                     return <EvalTriplet key={`eval_triplet_${i}`} input={testingResult.input}
                                         output={testingResult.output}
                                         evaluation={testingResult.evaluation}/>
@@ -41,14 +72,45 @@ function App() {
         </>
     )
 
-    async function testAndEvaluate() {
+    async function testAndEvaluate({taskAgentDefinitionPrompt, testCases, numTestCases = 2}: {
+        taskAgentDefinitionPrompt: string,
+        testCases?: string[]
+        numTestCases?: number
+    }) {
         setTestingResults([emptyTestingResults])
-        const res = await axios.post("http://localhost:5000/testAndEvaluate", {
+        const data: { taskAgentDefinitionPrompt: string, numTestCases: number, testCases?: string[] } = {
             taskAgentDefinitionPrompt: taskAgentDefinitionPrompt,
-            numTestCases: 3
+            numTestCases: numTestCases
+
+        }
+        if (testCases) {
+            data.testCases = testCases
+            data.numTestCases = testCases.length
+        }
+        const res = await axios.post("http://localhost:5000/testAndEvaluate", data)
+        const testingResults: TestingResult[] = res.data.map((d: {
+            input: string,
+            output: string,
+            evaluation: string
+        }) => {
+            return ({
+                input: d.input,
+                output: d.output,
+                evaluation: JSON.parse(d.evaluation)
+            })
         })
-        setTestingResults(res.data)
+        setTestingResults(testingResults)
         console.log(res.data)
+        const evaluations = res.data.map((d: { evaluation: string }) => {
+            try {
+                return JSON.parse(d.evaluation)
+            } catch {
+                console.warn("Could not parse evaluation object :(")
+                return d.evaluation
+            }
+
+        })
+        console.log(evaluations)
 
     }
 }
@@ -58,8 +120,13 @@ function App() {
 //     console.log(res.data)
 // }
 
-function TitledTextArea({title, value, onChange, rows = 15}: { title?: string, value?: string,onChange?: Function, rows?: number }) {
-    return (<div style={{border: "1px solid green"}}>
+function TitledTextArea({title, value, onChange, rows = 15}: {
+    title?: string,
+    value?: string,
+    onChange?: Function,
+    rows?: number
+}) {
+    return (<div>
         <div>{title}</div>
         <textarea
             value={value}
@@ -69,7 +136,7 @@ function TitledTextArea({title, value, onChange, rows = 15}: { title?: string, v
                 }
                 console.log(value)
             }}
-            style={{resize: "none", width:"100%"}} rows={rows} cols={50}/>
+            style={{resize: "none", width: "90%", margin: 0}} rows={rows}/>
     </div>)
 }
 

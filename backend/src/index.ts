@@ -14,8 +14,8 @@ import {log} from "console";
 import {
     generateTaskAgentPrompt,
     generateTestAgentPrompt,
-    generateValidationAgentDefinitionPrompt,
-    generateValidationAgentPrompt
+    generateEvaluationAgentDefinitionPrompt,
+    generateEvaluationAgentPrompt
 } from "./groq/base-prompts";
 import cors from 'cors';
 
@@ -48,7 +48,7 @@ app.post('/prompt', async (req: Request, res: Response, next: NextFunction) => {
     const testCases = await getGroqResponse(testAgentPrompt)
     const taskAgentPrompt = generateTaskAgentPrompt(initialPrompt, JSON.parse(testCases.response!).testCases)
     const taskAgentOutput = await getGroqResponse(taskAgentPrompt)
-    const validationAgentPrompt = generateValidationAgentPrompt(initialPrompt, testCases.response!, taskAgentOutput.response!)
+    const validationAgentPrompt = generateEvaluationAgentPrompt(initialPrompt, testCases.response!, taskAgentOutput.response!)
     const assessment = await getGroqResponse(validationAgentPrompt)
     const ret = {
         taskAgentPrompt: taskAgentPrompt,
@@ -93,7 +93,7 @@ app.post('/generateConversation', async (req, res) => {
     console.log(conversation);
 })
 
-async function generateTaskAgentOutputs(taskAgentDefinitionPrompt:string, testCases: string[]) {
+async function generateTaskAgentOutputs(taskAgentDefinitionPrompt: string, testCases: string[]) {
     const conv = await generateConversationWithPredefinedUserResponses({
         initialMessages: [
             generateUserMessage(taskAgentDefinitionPrompt + "\nYou will receive your inputs now."),
@@ -104,10 +104,10 @@ async function generateTaskAgentOutputs(taskAgentDefinitionPrompt:string, testCa
     return taskAgentOutputs;
 }
 
-async function generateEvaluationAgentOutputs(taskAgentDefinitionPrompt:string, evaluationPairs: string[]) {
+async function generateEvaluationAgentOutputs(taskAgentDefinitionPrompt: string, evaluationPairs: string[]) {
     const conv = await generateConversationWithPredefinedUserResponses({
         initialMessages: [
-            generateUserMessage(generateValidationAgentDefinitionPrompt(taskAgentDefinitionPrompt) + "\nYou will receive your inputs now."),
+            generateUserMessage(generateEvaluationAgentDefinitionPrompt(taskAgentDefinitionPrompt) + "\nYou will receive your inputs now."),
             generateUserMessage(evaluationPairs.length > 0 ? evaluationPairs[0] : "")
         ], userResponses: evaluationPairs.slice(1)
     })
@@ -117,21 +117,23 @@ async function generateEvaluationAgentOutputs(taskAgentDefinitionPrompt:string, 
 
 app.post('/testAndEvaluate', async (req, res) => {
     const body = req.body;
-    const {taskAgentDefinitionPrompt, numTestCases} = body;
-    const testCases:string[] = await generateTestCases(taskAgentDefinitionPrompt, numTestCases)
-    const taskAgentOutputs = await generateTaskAgentOutputs(taskAgentDefinitionPrompt, testCases);
+    const {taskAgentDefinitionPrompt, numTestCases, testCases} = body;
+    const finalTestCases: string[] = testCases || await generateTestCases(taskAgentDefinitionPrompt, numTestCases)
+    const taskAgentOutputs = await generateTaskAgentOutputs(taskAgentDefinitionPrompt, finalTestCases);
+    const r = await getGroqResponse("Generate some random nonsense")
+    taskAgentOutputs[0] = "" + r.response
     const evaluationObjects = []
-    for(let i = 0; i <testCases.length; i++){
+    for (let i = 0; i < finalTestCases.length; i++) {
         evaluationObjects.push({
-            input: testCases[i],
+            input: finalTestCases[i],
             output: taskAgentOutputs[i],
-            evaluation:""
+            evaluation: ""
         })
     }
-    const evaluationAgentOutputs = await generateEvaluationAgentOutputs(taskAgentDefinitionPrompt, evaluationObjects.map(obj=>{
+    const evaluationAgentOutputs = await generateEvaluationAgentOutputs(taskAgentDefinitionPrompt, evaluationObjects.map(obj => {
         return `Input: ${obj.input} \n\n Output: ${obj.output}`
     }))
-    evaluationObjects.forEach((o,i)=>{
+    evaluationObjects.forEach((o, i) => {
         o.evaluation = evaluationAgentOutputs[i]
     })
     res.send(evaluationObjects);
